@@ -1,0 +1,17 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+# Virtual environment
+venv/
+ENV/
+env/
+
+# Python cache files
+__pycache__/
+*.pyo
+*.pyc
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# SQLite database files
+data/inventory.db
