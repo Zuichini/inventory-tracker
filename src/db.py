@@ -1,12 +1,12 @@
 import sqlite3
 import os
+from src.utils import format_date
 
 DB_PATH = os.path.join("data", "inventory.db")
 
-# Database initialization and connection
 def init_db():
     """Initialize the database and create items table if it doesn’t exist."""
-    os.makedirs("data", exist_ok=True)  # ensure /data folder exists
+    os.makedirs("data", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
@@ -21,10 +21,8 @@ def init_db():
     conn.commit()
     conn.close()
 
-# CRUD operations
-# Create
+# --- CRUD operations ---
 def add_item(name, quantity, date_purchased, expiry_date):
-    """Insert a new item into the database."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
@@ -34,34 +32,37 @@ def add_item(name, quantity, date_purchased, expiry_date):
     conn.commit()
     conn.close()
 
-# Read
 def get_items():
     """Fetch all items from the database."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('SELECT id, name, quantity, expiry_date FROM items')
+    c.execute('SELECT * FROM items ORDER BY expiry_date ASC')
     rows = c.fetchall()
     conn.close()
     return rows
 
-# Delete
-def delete_item(item_id):
-    """Delete an item from the database by ID."""
+def get_item_by_id(item_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("DELETE FROM items WHERE id = ?", (item_id,))
-    conn.commit()
+    c.execute('SELECT * FROM items WHERE id=?', (item_id,))
+    row = c.fetchone()
     conn.close()
+    return row
 
-# Update
-def update_item(item_id, name, quantity, expiry_date):
-    """Update an item in the database."""
+def update_item(item_id, name, quantity, date_purchased, expiry_date):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
         UPDATE items
-        SET name = ?, quantity = ?, expiry_date = ?
-        WHERE id = ?
-    ''', (name, quantity, expiry_date, item_id))
+        SET name=?, quantity=?, date_purchased=?, expiry_date=?
+        WHERE id=?
+    ''', (name, quantity, date_purchased, expiry_date, item_id))
+    conn.commit()
+    conn.close()
+
+def delete_item(item_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('DELETE FROM items WHERE id=?', (item_id,))
     conn.commit()
     conn.close()
