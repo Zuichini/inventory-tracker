@@ -1,68 +1,74 @@
 import sqlite3
 import os
-from src.utils import format_date
+from datetime import datetime
 
-DB_PATH = os.path.join("data", "inventory.db")
+# --- Database Path ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "..", "data")
+DB_PATH = os.path.join(DATA_DIR, "inventory.db")
+
+# Ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
+
+def get_connection():
+    return sqlite3.connect(DB_PATH)
 
 def init_db():
-    """Initialize the database and create items table if it doesn’t exist."""
-    os.makedirs("data", exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''
+    """Initialize the database if it doesn't exist."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
-            date_purchased DATE NOT NULL,
-            expiry_date DATE NOT NULL
+            name TEXT UNIQUE NOT NULL,
+            quantity INTEGER,
+            expiry_date TEXT,
+            tracking_type TEXT NOT NULL DEFAULT 'quantity',
         )
-    ''')
+    """)
     conn.commit()
     conn.close()
 
-# --- CRUD operations ---
-def add_item(name, quantity, date_purchased, expiry_date):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO items (name, quantity, date_purchased, expiry_date)
+def add_item_to_db(name, quantity, date_purchased=None, expiry_date=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT OR IGNORE INTO items (name, quantity, date_purchased, expiry_date)
         VALUES (?, ?, ?, ?)
-    ''', (name, quantity, date_purchased, expiry_date))
+    """, (name, quantity, _format_date(date_purchased), _format_date(expiry_date)))
     conn.commit()
     conn.close()
 
-def get_items():
-    """Fetch all items from the database."""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('SELECT * FROM items ORDER BY expiry_date ASC')
-    rows = c.fetchall()
+def update_item_in_db(name, quantity, date_purchased=None, expiry_date=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE items
+        SET quantity = ?, date_purchased = ?, expiry_date = ?
+        WHERE name = ?
+    """, (quantity, _format_date(date_purchased), _format_date(expiry_date), name))
+    conn.commit()
+    conn.close()
+
+def delete_item_from_db(name):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM items WHERE name = ?", (name,))
+    conn.commit()
+    conn.close()
+
+def fetch_all_items():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name, quantity, date_purchased, expiry_date FROM items")
+    rows = cur.fetchall()
     conn.close()
     return rows
 
-def get_item_by_id(item_id):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('SELECT * FROM items WHERE id=?', (item_id,))
-    row = c.fetchone()
-    conn.close()
-    return row
-
-def update_item(item_id, name, quantity, date_purchased, expiry_date):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''
-        UPDATE items
-        SET name=?, quantity=?, date_purchased=?, expiry_date=?
-        WHERE id=?
-    ''', (name, quantity, date_purchased, expiry_date, item_id))
-    conn.commit()
-    conn.close()
-
-def delete_item(item_id):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('DELETE FROM items WHERE id=?', (item_id,))
-    conn.commit()
-    conn.close()
+def _format_date(date_value):
+    """Converts datetime.date or None to string for database storage."""
+    if not date_value:
+        return None
+    if isinstance(date_value, str):
+        return date_value
+    return date_value.strftime("%Y-%m-%d")

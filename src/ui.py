@@ -1,173 +1,210 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-from tkcalendar import DateEntry
+from PySide6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
+    QTableWidget, QTableWidgetItem, QDialog, QLabel, QLineEdit, QDateEdit, QMessageBox
+)
+from PySide6.QtCore import Qt, QDate
+import sys
+from datetime import datetime
 from src.db import add_item, update_item, delete_item, get_items, get_item_by_id
 from src.utils import parse_date, days_until
 
-# --- Center main window ---
-def center_window(root, width=600, height=400, x=None, y=None):
-    if x is None or y is None:
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        x = (screen_width - width) // 2
-        y = (screen_height - height) // 2
-    root.geometry(f"{width}x{height}+{x}+{y}")
 
-# --- Center popup relative to parent ---
-def center_popup(popup, width=400, height=250, parent=None):
-    if parent:
-        parent.update_idletasks()
-        x = parent.winfo_x() + (parent.winfo_width() - width) // 2
-        y = parent.winfo_y() + (parent.winfo_height() - height) // 2
-    else:
-        screen_width = popup.winfo_screenwidth()
-        screen_height = popup.winfo_screenheight()
-        x = (screen_width - width) // 2
-        y = (screen_height - height) // 2
-    popup.geometry(f"{width}x{height}+{x}+{y}")
+# --- Utility to center window ---
+def center_window(window, width=None, height=None):
+    screen = window.screen().geometry()
+    if width is None: width = window.width()
+    if height is None: height = window.height()
+    x = (screen.width() - width) // 2
+    y = (screen.height() - height) // 2
+    window.setGeometry(x, y, width, height)
 
-# --- Refresh treeview ---
-def refresh_items(tree):
-    tree.delete(*tree.get_children())
-    items = get_items()  # (id, name, quantity, date_purchased, expiry_date)
-    for item in items:
-        item_id, name, quantity, date_purchased, expiry_date = item
-        days_left = days_until(expiry_date)
-        expiry_display = "N/A" if days_left is None else (f"{days_left} days" if days_left >= 0 else "Expired")
-        tree.insert("", "end", values=(name, quantity, expiry_display), iid=item_id)
 
-# --- Add/Edit popup ---
-def open_item_popup(tree, item=None, buttons=None, parent=None):
-    # Disable main buttons
-    if buttons:
-        for btn in buttons:
-            btn.config(state="disabled")
+# --- Main Window ---
+class InventoryApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Inventory Tracker")
+        self.table = QTableWidget()
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Name", "Quantity", "Days Left"])
+        self.table.setSelectionBehavior(self.table.SelectRows)
+        self.table.setEditTriggers(self.table.NoEditTriggers)
 
-    popup = tk.Toplevel(parent)
-    popup.title("Edit Item" if item else "Add New Item")
-    popup.resizable(False, False)
+        self.add_btn = QPushButton("Add Item")
+        self.edit_btn = QPushButton("Edit Item")
+        self.delete_btn = QPushButton("Delete Item")
 
-    # Center the popup
-    center_popup(popup, width=300, height=220, parent=parent)
+        # Layout
+        btn_layout = QHBoxLayout()
+        btn_layout.addWidget(self.add_btn)
+        btn_layout.addWidget(self.edit_btn)
+        btn_layout.addWidget(self.delete_btn)
 
-    # On popup close, re-enable buttons
-    def on_close():
-        if buttons:
-            for btn in buttons:
-                btn.config(state="normal")
-        popup.destroy()
-    popup.protocol("WM_DELETE_WINDOW", on_close)
+        layout = QVBoxLayout(self)
+        layout.addLayout(btn_layout)
+        layout.addWidget(self.table)
 
-    # Labels & Entries
-    tk.Label(popup, text="Name").grid(row=0, column=0, padx=5, pady=5, sticky="e")
-    name_entry = tk.Entry(popup)
-    name_entry.grid(row=0, column=1, padx=5, pady=5)
+        # Signals
+        self.add_btn.clicked.connect(self.open_add_popup)
+        self.edit_btn.clicked.connect(self.open_edit_popup)
+        self.delete_btn.clicked.connect(self.delete_item)
+        self.table.cellDoubleClicked.connect(self.open_edit_popup)
 
-    tk.Label(popup, text="Quantity").grid(row=1, column=0, padx=5, pady=5, sticky="e")
-    quantity_entry = tk.Entry(popup)
-    quantity_entry.grid(row=1, column=1, padx=5, pady=5)
+        self.refresh_items()
+        self.setMinimumWidth(500)
+        self.setMinimumHeight(400)
+        center_window(self)
 
-    tk.Label(popup, text="Date Purchased").grid(row=2, column=0, padx=5, pady=5, sticky="e")
-    purchase_entry = DateEntry(popup, date_pattern="yyyy-mm-dd")
-    purchase_entry.grid(row=2, column=1, padx=5, pady=5)
+    # --- Refresh table ---
+    def refresh_items(self):
+        items = get_items()
+        self.table.setRowCount(len(items))
+        for row, item in enumerate(items):
+            item_id, name, quantity, date_purchased, expiry_date = item
+            self.table.setItem(row, 0, QTableWidgetItem(name))
+            self.table.setItem(row, 1, QTableWidgetItem(str(quantity)))
+            days = days_until(expiry_date)
+            days_left = "N/A" if days is None else (f"{days} days" if days >= 0 else "Expired")
+            self.table.setItem(row, 2, QTableWidgetItem(days_left))
+            self.table.setRowHeight(row, 25)
+            self.table.setRowData = item_id  # store ID for easy retrieval
 
-    tk.Label(popup, text="Expiry Date").grid(row=3, column=0, padx=5, pady=5, sticky="e")
-    expiry_entry = DateEntry(popup, date_pattern="yyyy-mm-dd")
-    expiry_entry.grid(row=3, column=1, padx=5, pady=5)
+    # --- Add Popup ---
+    def open_add_popup(self):
+        self.open_item_popup(mode="add")
 
-    # Pre-fill if editing
-    if item:
-        item_id, name, quantity, date_purchased, expiry_date = item
-        name_entry.insert(0, name)
-        quantity_entry.insert(0, str(quantity))
-        purchase_entry.set_date(parse_date(date_purchased))
-        expiry_entry.set_date(parse_date(expiry_date))
-
-    # Save function
-    def save_item():
-        name = name_entry.get()
-        quantity = quantity_entry.get()
-        purchase_date = purchase_entry.get_date().strftime("%Y-%m-%d")
-        expiry_date = expiry_entry.get_date().strftime("%Y-%m-%d")
-
-        if not name or not quantity:
-            messagebox.showerror("Error", "Name and Quantity are required!")
+    # --- Edit Popup ---
+    def open_edit_popup(self):
+        selected = self.table.currentRow()
+        if selected == -1:
+            QMessageBox.warning(self, "No Selection", "Please select an item to edit.")
             return
+        item_id = get_items()[selected][0]
+        self.open_item_popup(mode="edit", item_id=item_id)
 
-        try:
-            if item:
-                update_item(item[0], name, int(quantity), purchase_date, expiry_date)
-            else:
-                add_item(name, int(quantity), purchase_date, expiry_date)
-            refresh_items(tree)
+    # --- Item Popup (Add/Edit) ---
+    def open_item_popup(self, mode="add", item_id=None):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Item" if mode == "edit" else "Add Item")
+        dialog.setModal(True)
+        center_window(dialog, 350, 220)
+
+        # Disable buttons while popup is open
+        self.add_btn.setDisabled(True)
+        self.edit_btn.setDisabled(True)
+        self.delete_btn.setDisabled(True)
+
+        # Re-enable buttons when popup closes
+        def on_close():
+            self.add_btn.setDisabled(False)
+            self.edit_btn.setDisabled(False)
+            self.delete_btn.setDisabled(False)
+            dialog.close()
+
+        dialog.finished.connect(on_close)
+
+        layout = QVBoxLayout(dialog)
+
+        # Name
+        name_layout = QHBoxLayout()
+        name_layout.addWidget(QLabel("Name:"))
+        name_entry = QLineEdit()
+        name_layout.addWidget(name_entry)
+        layout.addLayout(name_layout)
+
+        # Quantity
+        qty_layout = QHBoxLayout()
+        qty_layout.addWidget(QLabel("Quantity:"))
+        qty_entry = QLineEdit()
+        qty_layout.addWidget(qty_entry)
+        layout.addLayout(qty_layout)
+
+        # Date Purchased
+        purchase_layout = QHBoxLayout()
+        purchase_layout.addWidget(QLabel("Date Purchased:"))
+        purchase_entry = QDateEdit()
+        purchase_entry.setDisplayFormat("yyyy-MM-dd")
+        purchase_entry.setCalendarPopup(True)
+        purchase_layout.addWidget(purchase_entry)
+        layout.addLayout(purchase_layout)
+
+        # Expiry Date
+        expiry_layout = QHBoxLayout()
+        expiry_layout.addWidget(QLabel("Expiry Date:"))
+        expiry_entry = QDateEdit()
+        expiry_entry.setDisplayFormat("yyyy-MM-dd")
+        expiry_entry.setCalendarPopup(True)
+        expiry_layout.addWidget(expiry_entry)
+        layout.addLayout(expiry_layout)
+
+        # Pre-fill if editing
+        if mode == "edit" and item_id:
+            item = get_item_by_id(item_id)
+            _, name, quantity, date_purchased, expiry_date = item
+            name_entry.setText(name)
+            qty_entry.setText(str(quantity))
+            if date_purchased:
+                purchase_entry.setDate(parse_date(date_purchased))
+            if expiry_date:
+                expiry_entry.setDate(parse_date(expiry_date))
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        save_btn = QPushButton("Save")
+        cancel_btn = QPushButton("Cancel")
+        btn_layout.addWidget(save_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+        # Save action
+        def save_action():
+            name = name_entry.text().strip()
+            quantity = qty_entry.text().strip()
+            purchase_date = purchase_entry.date().toString("yyyy-MM-dd") if purchase_entry.date() else None
+            expiry_date = expiry_entry.date().toString("yyyy-MM-dd") if expiry_entry.date() else None
+
+            if not name or not quantity:
+                QMessageBox.warning(dialog, "Error", "Name and Quantity are required!")
+                return
+            try:
+                quantity = int(quantity)
+            except ValueError:
+                QMessageBox.warning(dialog, "Error", "Quantity must be a number!")
+                return
+
+            if mode == "add":
+                add_item(name, quantity, purchase_date, expiry_date)
+            elif mode == "edit" and item_id:
+                update_item(item_id, name, quantity, purchase_date, expiry_date)
+
+            self.refresh_items()
             on_close()
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
 
-    # Centered Save/Cancel buttons
-    button_frame = tk.Frame(popup)
-    button_frame.grid(row=4, column=0, columnspan=2, pady=10)
+        save_btn.clicked.connect(save_action)
+        cancel_btn.clicked.connect(on_close)
 
-    save_btn = tk.Button(button_frame, text="Save", width=12, command=save_item)
-    cancel_btn = tk.Button(button_frame, text="Cancel", width=12, command=on_close)
-    save_btn.pack(side="left", padx=5)
-    cancel_btn.pack(side="left", padx=5)
+        dialog.exec()
 
-    popup.grid_columnconfigure(0, weight=1)
-    popup.grid_columnconfigure(1, weight=1)
 
-# --- Edit selected item ---
-def on_edit(tree, buttons=None, parent=None):
-    selected = tree.selection()
-    if not selected:
-        messagebox.showwarning("No Selection", "Please select an item to edit.")
-        return
-    item_id = selected[0]
-    item = get_item_by_id(item_id)
-    open_item_popup(tree, item, buttons, parent)
+    # --- Delete ---
+    def delete_item(self):
+        selected = self.table.currentRow()
+        if selected == -1:
+            QMessageBox.warning(self, "No Selection", "Please select an item to delete.")
+            return
+        item_id = get_items()[selected][0]
+        confirm = QMessageBox.question(
+            self, "Confirm Delete", "Are you sure you want to delete this item?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm == QMessageBox.Yes:
+            delete_item(item_id)
+            self.refresh_items()
 
-# --- Delete selected item ---
-def on_delete(tree):
-    selected = tree.selection()
-    if not selected:
-        messagebox.showwarning("No Selection", "Please select an item to delete.")
-        return
-    confirm = messagebox.askyesno("Confirm Delete", "Are you sure you want to delete this item?")
-    if confirm:
-        delete_item(selected[0])
-        refresh_items(tree)
 
-# --- Main App ---
+# --- Run App ---
 def start_app():
-    root = tk.Tk()
-    root.title("Inventory Tracker")
-    root.resizable(False, False)
-    center_window(root, width=600, height=400)
-
-    # Buttons
-    button_frame = tk.Frame(root)
-    button_frame.pack(pady=5)
-
-    add_button = tk.Button(button_frame, text="Add Item", width=12,
-                           command=lambda: open_item_popup(tree, buttons=[add_button, edit_button, delete_button], parent=root))
-    edit_button = tk.Button(button_frame, text="Edit Item", width=12,
-                            command=lambda: on_edit(tree, buttons=[add_button, edit_button, delete_button], parent=root))
-    delete_button = tk.Button(button_frame, text="Delete Item", width=12,
-                              command=lambda: on_delete(tree))
-
-    add_button.pack(side="left", padx=5)
-    edit_button.pack(side="left", padx=5)
-    delete_button.pack(side="left", padx=5)
-
-    # Treeview
-    columns = ("Name", "Quantity", "Days Left")
-    tree = ttk.Treeview(root, columns=columns, show="headings")
-    for col in columns:
-        tree.heading(col, text=col)
-    tree.pack(fill="both", expand=True, padx=10, pady=10)
-
-    # Double-click row to edit
-    tree.bind("<Double-1>", lambda e: on_edit(tree, buttons=[add_button, edit_button, delete_button], parent=root))
-
-    refresh_items(tree)
-    root.mainloop()
+    app = QApplication(sys.argv)
+    window = InventoryApp()
+    window.show()
+    sys.exit(app.exec())

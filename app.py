@@ -1,9 +1,13 @@
-from src.ui import start_app
-from src.db import init_db
+# app.py
+import sys
+from PySide6.QtWidgets import QApplication
+from src.ui import InventoryUI
+
+def main():
+    app = QApplication(sys.argv)
+    window = InventoryUI()
+    window.show()
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
-    # Initialize database
-    init_db()
-
-    # Start the app
-    start_app()
+    main()

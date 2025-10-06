@@ -1,17 +1,56 @@
-# Created by venv; see https://docs.python.org/3/library/venv.html
-# Virtual environment
+# ------------------------------
+# Python / Virtual Environment
+# ------------------------------
 venv/
 ENV/
 env/
-
-# Python cache files
-__pycache__/
-*.pyo
+.venv/
 *.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.python-version
 
-# OS files
+# ------------------------------
+# Build / Distribution
+# ------------------------------
+build/
+dist/
+*.egg-info/
+*.spec
+
+# ------------------------------
+# Logs / Debug Files
+# ------------------------------
+*.log
+*.bak
+*.tmp
+
+# ------------------------------
+# OS-Specific Files
+# ------------------------------
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# SQLite database files
+# ------------------------------
+# IDE / Editor Configs
+# ------------------------------
+.vscode/
+.idea/
+*.code-workspace
+
+# ------------------------------
+# Databases / Local Data
+# ------------------------------
 data/inventory.db
+
+# ------------------------------
+# PyInstaller / PySide Cache
+# ------------------------------
+*.qt.cache
+*.qmlc
+*.qrc
+*.rcc
+__pyinstaller_cache__/
+.cache/
